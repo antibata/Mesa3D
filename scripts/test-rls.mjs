@@ -1,0 +1,58 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile, readdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const db = new PGlite();
+// Supabase supplies these roles/schemas. Reproduce their RLS-relevant contract locally.
+await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+create schema auth; create table auth.users(id uuid primary key);
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+grant usage on schema auth, public to anon,authenticated,service_role;
+grant execute on function auth.uid() to anon,authenticated,service_role;
+create schema storage;
+create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);
+alter table storage.objects enable row level security;
+create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name,'/') $$;
+grant usage on schema storage to anon,authenticated,service_role;
+grant select,insert,update,delete on storage.objects to anon,authenticated;
+grant execute on function storage.foldername(text) to anon,authenticated;`);
+const migrations = (await readdir('supabase/migrations')).filter(v=>v.endsWith('.sql')).sort();
+for (const file of migrations) await db.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+const [admin,alice,bob] = ['a','b','c'].map(c=>`${c.repeat(8)}-${c.repeat(4)}-4${c.repeat(3)}-8${c.repeat(3)}-${c.repeat(12)}`);
+const [r1,r2]=['1','2'].map(c=>`${c.repeat(8)}-${c.repeat(4)}-4${c.repeat(3)}-8${c.repeat(3)}-${c.repeat(12)}`);
+await db.query('insert into auth.users values ($1),($2),($3)',[admin,alice,bob]);
+await db.query('insert into public.platform_admins values($1)',[admin]);
+await db.query("insert into public.restaurants(id,name,slug,published) values ($1,'Brasa','brasa',true),($2,'Verde','verde',false)",[r1,r2]);
+await db.query('insert into public.restaurant_members values($1,$2),($3,$4)',[r1,alice,r2,bob]);
+await db.query("insert into public.dishes(restaurant_id,name,category,available) values($1,'Visible','Principales',true),($1,'Oculto','Principales',false),($2,'Privado','Principales',true)",[r1,r2]);
+async function as(role,user=''){await db.exec(`reset role;set role ${role}`);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);}
+let passed=0;
+function check(ok,label){assert.ok(ok,label);passed++;console.log(`PASS ${label}`);}
+async function denied(sql,params,label){let rejected=false;try{await db.query(sql,params);}catch{rejected=true;}check(rejected,label);}
+await as('anon');
+check((await db.query('select * from restaurants')).rows.length===1,'public can read only published restaurants');
+check((await db.query('select * from dishes')).rows.length===1,'public cannot read hidden or draft dishes');
+await denied("insert into dishes(restaurant_id,name,category) values($1,'Hack','Principales')",[r1],'anonymous writes rejected');
+await as('authenticated',alice);
+check((await db.query('select * from restaurants')).rows.length===1,'restaurant A cannot read draft restaurant B');
+check((await db.query('select * from dishes')).rows.length===2,'restaurant A sees its hidden dishes');
+check((await db.query('select * from restaurant_members')).rows.length===1,'memberships are private');
+check((await db.query('update dishes set price=123 where restaurant_id=$1 returning id',[r1])).rows.length===2,'owner can update own dishes');
+check((await db.query('update dishes set price=99 where restaurant_id=$1 returning id',[r2])).rows.length===0,'cross-restaurant update blocked');
+check((await db.query('delete from dishes where restaurant_id=$1 returning id',[r2])).rows.length===0,'cross-restaurant delete blocked');
+await denied("insert into dishes(restaurant_id,name,category) values($1,'Hack','Principales')",[r2],'cross-restaurant insert blocked');
+await denied('update dishes set restaurant_id=$1 where restaurant_id=$2',[r2,r1],'dish cannot move between restaurants');
+await denied('insert into platform_admins values($1)',[alice],'user cannot promote self to platform admin');
+await denied('insert into restaurant_members values($1,$2)',[r2,alice],'user cannot join another restaurant');
+await denied("update restaurants set slug='changed' where id=$1",[r1],'permanent QR URL protected');
+await denied("insert into restaurants(name,slug) values('Hack','hack')",[],'restaurant account cannot create tenant');
+await db.query("insert into storage.objects(bucket_id,name) values('dish-media',$1)",[`${r1}/photo.jpg`]);
+check(true,'owner can upload into own restaurant folder');
+await denied("insert into storage.objects(bucket_id,name) values('dish-media',$1)",[`${r2}/photo.jpg`],'cross-restaurant storage upload blocked');
+await denied("update storage.objects set name=$1 where name=$2",[`${r2}/photo.jpg`,`${r1}/photo.jpg`],'storage reassignment blocked');
+await as('authenticated',admin);
+check((await db.query('select * from restaurants')).rows.length===2,'platform admin sees all restaurants');
+check((await db.query('select * from dishes')).rows.length===3,'platform admin sees all dishes');
+await db.query("insert into restaurants(name,slug) values('Nuevo','nuevo')");
+check(true,'platform admin can create restaurants');
+await db.close();console.log(`\n${passed} security checks passed. Storage API and hosted Auth still require a real Supabase integration test.`);

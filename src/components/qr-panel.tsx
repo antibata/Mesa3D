@@ -1,0 +1,11 @@
+'use client';
+import { useEffect,useState } from 'react';
+import { Download,Copy,Check } from 'lucide-react';
+import type { Restaurant } from '@/lib/types';
+import { Notice } from './ui';
+export function QrPanel({restaurant}:{restaurant:Restaurant}){
+  const [url,setUrl]=useState(''),[png,setPng]=useState(''),[copied,setCopied]=useState(false),[error,setError]=useState('');
+  useEffect(()=>{let stopped=false;const origin=process.env.NEXT_PUBLIC_SITE_URL||window.location.origin;const link=`${origin.replace(/\/$/,'')}/r/${restaurant.slug}`;setUrl(link);import('qrcode').then(q=>q.toDataURL(link,{width:900,margin:3,errorCorrectionLevel:'H',color:{dark:'#20241f',light:'#ffffff'}})).then(v=>{if(!stopped)setPng(v);}).catch(()=>{if(!stopped)setError('No se pudo generar el QR. Vuelve a abrir esta pestaña.');});return()=>{stopped=true;};},[restaurant.slug]);
+  const local = url.includes('terminal.local')||url.includes('localhost')||url.includes('127.0.0.1');
+  return <>{error?<Notice error>{error}</Notice>:null}{!restaurant.published?<Notice>La carta está en borrador. Publícala desde Identidad para que el QR permita verla.</Notice>:null}<div className="qr-panel"><div className="qr-card"><h2>{restaurant.name}</h2>{png?<img src={png} alt={`Código QR para la carta de ${restaurant.name}`}/>:<p>Generando código…</p>}<p>Escanea. Explora. Disfruta.</p><small>Descubre nuestra carta</small></div><div className="qr-info"><h2>Tu carta, a un escaneo.</h2><p>Descarga el QR para colocarlo en las mesas. Puedes actualizar platos y precios sin cambiar este código.</p><div className="url-box">{url}</div>{local?<Notice>Esta vista aún usa un enlace de prueba. Genera el QR definitivo después de publicar la plataforma.</Notice>:null}<div className="actions">{png?<a className="btn primary" href={png} download={`qr-${restaurant.slug}.png`}><Download size={17}/> Descargar QR</a>:null}<button className="btn" onClick={async()=>{try{await navigator.clipboard.writeText(url);setCopied(true);setTimeout(()=>setCopied(false),2500);}catch{setError('No se pudo copiar. Selecciona y copia el enlace mostrado.');}}}>{copied?<Check size={17}/>:<Copy size={17}/>} {copied?'Copiado':'Copiar enlace'}</button></div></div></div></>;
+}
