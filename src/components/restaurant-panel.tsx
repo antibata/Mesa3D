@@ -1,18 +1,298 @@
-'use client';
-import { useState } from 'react';
-import Link from 'next/link';
-import { Plus,ExternalLink,Pencil,Trash2,Box,ArrowLeft } from 'lucide-react';
-import { Workspace } from './workspace';
-import { useApp } from './provider';
-import { Modal,Notice,Photo } from './ui';
-import { RestaurantForm,DishForm } from './editors';
-import { QrPanel } from './qr-panel';
-import { priceLabel } from '@/lib/validation';
-import type { Dish } from '@/lib/types';
-export function RestaurantPanel({id}:{id:string}){
-  const app=useApp();const [tab,setTab]=useState('Carta'),[editing,setEditing]=useState<Dish|null>(null),[adding,setAdding]=useState(false),[deleting,setDeleting]=useState<Dish|null>(null),[notice,setNotice]=useState(''),[error,setError]=useState(''),[pending,setPending]=useState('');
-  const r=app.restaurants.find(v=>v.id===id);const allowed=app.access?.kind==='platform'||app.access?.restaurantIds.includes(id);
-  const dishes=app.dishes.filter(d=>d.restaurant_id===id).sort((a,b)=>a.sort_order-b.sort_order);
-  async function toggle(d:Dish){setPending(d.id);setError('');try{await app.saveDish({...d,available:!d.available});}catch(e){setError(e instanceof Error?e.message:'No se pudo actualizar.');}finally{setPending('');}}
-  return <Workspace title={r?.name??'Restaurante'}>{!r||!allowed?<div className="empty"><h2>Restaurante no disponible</h2><p>No tienes acceso a esta carta o ya no existe.</p><Link className="btn" href="/panel">Volver a mis restaurantes</Link></div>:<><Link href="/panel" className="back-link" style={{marginTop:0,marginBottom:20}}><ArrowLeft size={14}/> Mis restaurantes</Link><div className="workspace-heading"><div><h1>{r.name}<span className="pill" style={{marginLeft:12,verticalAlign:'middle'}}>{r.published?'Publicada':'Borrador'}</span></h1><p>Una carta siempre al día.</p></div><div className="actions">{r.published?<Link href={`/r/${r.slug}`} className="btn"><ExternalLink size={16}/> Ver carta</Link>:null}<button className="btn primary" onClick={()=>setAdding(true)}><Plus size={18}/> Añadir plato</button></div></div><div className="tabs" role="tablist" aria-label="Administración del restaurante">{['Carta','Identidad','Código QR'].map(t=><button key={t} role="tab" aria-selected={tab===t} aria-controls="restaurant-tab-content" id={`tab-${t.replaceAll(' ','-')}`} className={`tab ${tab===t?'active':''}`} onClick={()=>{setTab(t);setNotice('');setError('');}}>{t}{t==='Carta'?` (${dishes.length})`:''}</button>)}</div>{notice?<Notice>{notice}</Notice>:null}{error?<Notice error>{error}</Notice>:null}<div id="restaurant-tab-content" role="tabpanel" aria-labelledby={`tab-${tab.replaceAll(' ','-')}`}>{tab==='Carta'?(dishes.length?<div className="table-wrap"><table className="dish-table"><thead><tr><th>Plato</th><th>Precio</th><th>Experiencia</th><th>Disponible</th><th><span className="sr-only">Acciones</span></th></tr></thead><tbody>{dishes.map(d=><tr key={d.id}><td><div className="dish-cell"><Photo src={d.image_url} alt=""/><div><strong>{d.name}</strong><small>{d.category}</small></div></div></td><td>{priceLabel(d.price,r.currency)}</td><td>{d.model_url?<span className="pill orange"><Box size={12}/> 3D + AR</span>:<span className="pill">Fotografía</span>}</td><td><button type="button" role="switch" aria-checked={d.available} aria-label={`Disponibilidad de ${d.name}`} className="switch" disabled={pending===d.id} onClick={()=>void toggle(d)}><span className="switch-track"/>{d.available?'Visible':'Oculto'}</button></td><td><div className="actions"><button className="icon-button" aria-label={`Editar ${d.name}`} onClick={()=>setEditing(d)}><Pencil size={16}/></button><button className="icon-button" aria-label={`Eliminar ${d.name}`} onClick={()=>setDeleting(d)}><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div>:<div className="empty"><Box/><h3>Tu carta empieza aquí</h3><p>Añade el primer plato con su foto, precio y, si lo tienes, su modelo 3D.</p><button className="btn primary" onClick={()=>setAdding(true)}>Añadir primer plato</button></div>):tab==='Identidad'?<div className="form-card"><RestaurantForm key={r.id} restaurant={r} onSaved={()=>setNotice('Los cambios de tu restaurante están guardados.')}/></div>:<QrPanel restaurant={r}/>}</div>{adding||editing?<Modal title={editing?'Editar plato':'Nuevo plato'} onClose={()=>{setAdding(false);setEditing(null);}}><DishForm key={editing?.id??'new'} restaurant={r} dish={editing??undefined} onCancel={()=>{setAdding(false);setEditing(null);}} onSaved={()=>{setAdding(false);setEditing(null);setNotice('Plato guardado. La carta ya refleja los cambios.');}}/></Modal>:null}{deleting?<Modal title="Eliminar plato" onClose={()=>setDeleting(null)}><div className="form-body"><p>¿Eliminar <strong>{deleting.name}</strong> de la carta? Esta acción no se puede deshacer.</p><div className="form-actions"><button className="btn" onClick={()=>setDeleting(null)}>Cancelar</button><button className="btn danger" disabled={pending==='delete'} onClick={async()=>{setPending('delete');try{await app.deleteDish(deleting.id);setDeleting(null);setNotice('Plato eliminado.');}catch(e){setError(e instanceof Error?e.message:'No se pudo eliminar.');setDeleting(null);}finally{setPending('');}}}>Eliminar plato</button></div></div></Modal>:null}</>}</Workspace>;
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import {
+  Plus,
+  ExternalLink,
+  Pencil,
+  Trash2,
+  Box,
+  ArrowLeft,
+} from "lucide-react";
+import { Workspace } from "./workspace";
+import { useApp } from "./provider";
+import { Modal, Notice, Photo } from "./ui";
+import { RestaurantForm, DishForm } from "./editors";
+import { QrPanel } from "./qr-panel";
+import { priceLabel } from "@/lib/validation";
+import type { Dish } from "@/lib/types";
+export function RestaurantPanel({ id }: { id: string }) {
+  const app = useApp();
+  const [tab, setTab] = useState("Carta"),
+    [editing, setEditing] = useState<Dish | null>(null),
+    [adding, setAdding] = useState(false),
+    [deleting, setDeleting] = useState<Dish | null>(null),
+    [notice, setNotice] = useState(""),
+    [error, setError] = useState(""),
+    [pending, setPending] = useState("");
+  const r = app.restaurants.find((v) => v.id === id);
+  const allowed =
+    app.access?.kind === "platform" || app.access?.restaurantIds.includes(id);
+  const dishes = app.dishes
+    .filter((d) => d.restaurant_id === id)
+    .sort((a, b) => a.sort_order - b.sort_order);
+  async function toggle(d: Dish) {
+    setPending(d.id);
+    setError("");
+    try {
+      await app.saveDish({ ...d, available: !d.available });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo actualizar.");
+    } finally {
+      setPending("");
+    }
+  }
+  return (
+    <Workspace title={r?.name ?? "Restaurante"}>
+      {!r || !allowed ? (
+        <div className="empty">
+          <h2>Restaurante no disponible</h2>
+          <p>No tienes acceso a esta carta o ya no existe.</p>
+          <Link className="btn" href="/panel">
+            Volver a mis restaurantes
+          </Link>
+        </div>
+      ) : (
+        <>
+          <Link
+            href="/panel"
+            className="back-link"
+            style={{ marginTop: 0, marginBottom: 20 }}
+          >
+            <ArrowLeft size={14} /> Mis restaurantes
+          </Link>
+          <div className="workspace-heading">
+            <div>
+              <h1>
+                {r.name}
+                <span
+                  className="pill"
+                  style={{ marginLeft: 12, verticalAlign: "middle" }}
+                >
+                  {r.published ? "Publicada" : "Borrador"}
+                </span>
+              </h1>
+              <p>Una carta siempre al día.</p>
+            </div>
+            <div className="actions">
+              {r.published ? (
+                <Link href={`/r/${r.slug}`} className="btn">
+                  <ExternalLink size={16} /> Ver carta
+                </Link>
+              ) : null}
+              <button className="btn primary" onClick={() => setAdding(true)}>
+                <Plus size={18} /> Añadir plato
+              </button>
+            </div>
+          </div>
+          <div
+            className="tabs"
+            role="tablist"
+            aria-label="Administración del restaurante"
+          >
+            {["Carta", "Identidad", "Código QR"].map((t) => (
+              <button
+                key={t}
+                role="tab"
+                tabIndex={tab === t ? 0 : -1}
+                aria-selected={tab === t}
+                aria-controls="restaurant-tab-content"
+                id={`tab-${t.replaceAll(" ", "-")}`}
+                className={`tab ${tab === t ? "active" : ""}`}
+                onClick={() => {
+                  setTab(t);
+                  setNotice("");
+                  setError("");
+                }}
+                onKeyDown={e => {
+                  const tabs = ['Carta', 'Identidad', 'Código QR'];
+                  const index = tabs.indexOf(t);
+                  const next = e.key === 'ArrowRight' ? (index + 1) % tabs.length : e.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+                  if (next < 0) return;
+                  e.preventDefault(); setTab(tabs[next]); setNotice(''); setError('');
+                  document.getElementById(`tab-${tabs[next].replaceAll(' ', '-')}`)?.focus();
+                }}
+              >
+                {t}
+                {t === "Carta" ? ` (${dishes.length})` : ""}
+              </button>
+            ))}
+          </div>
+          {notice ? <Notice>{notice}</Notice> : null}
+          {error ? <Notice error>{error}</Notice> : null}
+          <div
+            id="restaurant-tab-content"
+            role="tabpanel"
+            aria-labelledby={`tab-${tab.replaceAll(" ", "-")}`}
+          >
+            {tab === "Carta" ? (
+              dishes.length ? (
+                <div className="table-wrap">
+                  <table className="dish-table">
+                    <thead>
+                      <tr>
+                        <th>Plato</th>
+                        <th>Precio</th>
+                        <th>Experiencia</th>
+                        <th>Disponible</th>
+                        <th>
+                          <span className="sr-only">Acciones</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dishes.map((d) => (
+                        <tr key={d.id}>
+                          <td>
+                            <div className="dish-cell">
+                              <Photo src={d.image_url} alt="" />
+                              <div>
+                                <strong>{d.name}</strong>
+                                <small>{d.category}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{priceLabel(d.price, r.currency)}</td>
+                          <td>
+                            {d.model_url ? (
+                              <span className="pill orange">
+                                <Box size={12} /> 3D + AR
+                              </span>
+                            ) : (
+                              <span className="pill">Fotografía</span>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={d.available}
+                              aria-label={`Disponibilidad de ${d.name}`}
+                              className="switch"
+                              disabled={pending === d.id}
+                              onClick={() => void toggle(d)}
+                            >
+                              <span className="switch-track" />
+                              {d.available ? "Visible" : "Oculto"}
+                            </button>
+                          </td>
+                          <td>
+                            <div className="actions">
+                              <button
+                                className="icon-button"
+                                aria-label={`Editar ${d.name}`}
+                                onClick={() => setEditing(d)}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                className="icon-button"
+                                aria-label={`Eliminar ${d.name}`}
+                                onClick={() => setDeleting(d)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty">
+                  <Box />
+                  <h3>Tu carta empieza aquí</h3>
+                  <p>
+                    Añade el primer plato con su foto, precio y, si lo tienes,
+                    su modelo 3D.
+                  </p>
+                  <button
+                    className="btn primary"
+                    onClick={() => setAdding(true)}
+                  >
+                    Añadir primer plato
+                  </button>
+                </div>
+              )
+            ) : tab === "Identidad" ? (
+              <div className="form-card">
+                <RestaurantForm
+                  key={r.id}
+                  restaurant={r}
+                  onSaved={() =>
+                    setNotice("Los cambios de tu restaurante están guardados.")
+                  }
+                />
+              </div>
+            ) : (
+              <QrPanel restaurant={r} />
+            )}
+          </div>
+          {adding || editing ? (
+            <Modal
+              title={editing ? "Editar plato" : "Nuevo plato"}
+              onClose={() => {
+                setAdding(false);
+                setEditing(null);
+              }}
+            >
+              <DishForm
+                key={editing?.id ?? "new"}
+                restaurant={r}
+                dish={editing ?? undefined}
+                onCancel={() => {
+                  setAdding(false);
+                  setEditing(null);
+                }}
+                onSaved={() => {
+                  setAdding(false);
+                  setEditing(null);
+                  setNotice("Plato guardado. La carta ya refleja los cambios.");
+                }}
+              />
+            </Modal>
+          ) : null}
+          {deleting ? (
+            <Modal title="Eliminar plato" onClose={() => setDeleting(null)}>
+              <div className="form-body">
+                <p>
+                  ¿Eliminar <strong>{deleting.name}</strong> de la carta? Esta
+                  acción no se puede deshacer.
+                </p>
+                <div className="form-actions">
+                  <button className="btn" onClick={() => setDeleting(null)}>
+                    Cancelar
+                  </button>
+                  <button
+                    className="btn danger"
+                    disabled={pending === "delete"}
+                    onClick={async () => {
+                      setPending("delete");
+                      try {
+                        await app.deleteDish(deleting.id);
+                        setDeleting(null);
+                        setNotice("Plato eliminado.");
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : "No se pudo eliminar.",
+                        );
+                        setDeleting(null);
+                      } finally {
+                        setPending("");
+                      }
+                    }}
+                  >
+                    Eliminar plato
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          ) : null}
+        </>
+      )}
+    </Workspace>
+  );
 }

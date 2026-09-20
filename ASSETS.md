@@ -6,6 +6,7 @@
 - Archive download: https://kenney.nl/media/pages/assets/food-kit/83086fa91c-1719418518/kenney_food-kit.zip
 - License: CC0; the archive's `License.txt` explicitly allows commercial use. Its copy is `public/models/kenney-LICENSE.txt`.
 - Selected GLBs: `public/models/burger.glb` from `burger-cheese.glb`, `public/models/pizza.glb` from `pizza.glb`, `public/models/cake.glb` from `cake.glb`.
+- Required texture: `public/models/Textures/colormap.png` is the original CC0 palette from `Models/GLB format/Textures/colormap.png` in the Kenney archive. All three models reference this relative path; preserve capitalization when deploying. This replaces the approximate palette from the earlier menu patch.
 - Matching model thumbnails: `public/media/burger-3d.png`, `public/media/pizza-3d.png`, `public/media/cake-3d.png` from the archive's `Previews` folder.
 - The models are deliberately stylized and have no relation to the stock photographs or a restaurant's real plates. Each detail view marks the model as demonstrative. Kenney geometries use approximately 36 cm width for the burger, 42 cm for pizza, and 32 cm for the cake; these are generic dimensions.
 

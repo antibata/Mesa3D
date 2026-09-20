@@ -6,7 +6,7 @@ Plataforma de cartas digitales para varios restaurantes. Cada restaurante tiene 
 
 ## Probar la demostración
 
-Requiere Node.js 22 o posterior.
+Requiere Node.js 22.6 o posterior (recomendado: la versión LTS disponible en Vercel).
 
 ```bash
 npm ci
@@ -57,12 +57,20 @@ El panel permite subir imágenes JPEG/PNG/WebP y archivos GLB/USDZ a Supabase St
 
 ```bash
 npm run typecheck
+npm run test:unit
+npm run test:assets
 npm run build
 npm run test:security
 npm run test:smoke
+npx playwright install chromium
+npm run test:e2e
 ```
 
 `test:security` ejecuta la migración en PGlite, simula usuarios anónimos, administradores y encargados de dos restaurantes y comprueba el aislamiento de sus datos. `test:smoke` verifica que el servidor de producción entregue las páginas y los cuatro archivos GLB. **Esto no sustituye una prueba final de Auth y Storage en un proyecto real de Supabase ni una revisión visual en Android y iPhone**.
+
+`test:assets` también comprueba las texturas externas referenciadas por los GLB. Se ejecuta automáticamente antes de compilar para evitar modelos incompletos. `test:e2e` recorre la demo en escritorio y móvil: categorías, modelos, edición, disponibilidad, borradores, QR, accesos, errores de carga y sincronización de pestañas. Compila **sin variables Supabase** para estas pruebas; el recorrido se detiene si detecta el acceso de cuentas reales. La emulación móvil no comprueba la cámara física ni ARKit/ARCore.
+
+La guía paso a paso para conectar tus cuentas está en [CONFIGURACION.md](CONFIGURACION.md). El historial de esta revisión está en [CAMBIOS.md](CAMBIOS.md).
 
 ## Licencias y atribuciones
 

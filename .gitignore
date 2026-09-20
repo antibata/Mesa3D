@@ -8,3 +8,4 @@ out/
 .sites-runtime/
 supabase/.temp/
 test-results/
+playwright-report/

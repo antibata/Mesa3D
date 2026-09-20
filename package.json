@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "next build",
-    "prebuild": "node scripts/fetch-assets.mjs",
+    "prebuild": "node scripts/fetch-assets.mjs && node scripts/check-assets.mjs",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test:security": "node scripts/test-rls.mjs",
-    "test:smoke": "node scripts/smoke.mjs"
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:assets": "node scripts/check-assets.mjs",
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=22"
@@ -26,6 +29,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.1",
     "@types/qrcode": "1.5.6",
