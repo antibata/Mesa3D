@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Store,
   Utensils,
@@ -15,6 +16,7 @@ import { Modal, Notice } from "@/components/ui";
 import { RestaurantForm } from "@/components/editors";
 export default function Dashboard() {
   const app = useApp();
+  const router = useRouter();
   const [creating, setCreating] = useState(false),
     [reset, setReset] = useState(false),
     [notice, setNotice] = useState("");
@@ -59,9 +61,9 @@ export default function Dashboard() {
         </div>
         <div className="stat">
           <span className="stat-label">
-            Modelos 3D <Box size={18} />
+            Platos destacados <Box size={18} />
           </span>
-          <strong>{dishes.filter((d) => d.model_url).length}</strong>
+          <strong>{dishes.filter((d) => d.featured).length}</strong>
         </div>
       </div>
       <div className="section-label">
@@ -94,12 +96,13 @@ export default function Dashboard() {
                   platos <span aria-hidden="true">·</span>{" "}
                   {
                     app.dishes.filter(
-                      (d) => d.restaurant_id === r.id && d.model_url,
+                      (d) => d.restaurant_id === r.id && d.featured,
                     ).length
                   }{" "}
-                  modelos 3D
+                  destacados
                 </p>
                 <div className="restaurant-card-actions">
+                  {app.access?.kind === "platform" ? <Link href={`/panel/restaurantes/${r.id}/alta`} className="btn primary">Alta y entrega</Link> : null}
                   <Link
                     href={`/panel/restaurantes/${r.id}`}
                     className="btn dark"
@@ -150,6 +153,7 @@ export default function Dashboard() {
             onSaved={(r) => {
               setCreating(false);
               setNotice(`${r.name} fue creado. Ya puedes cargar su carta.`);
+              router.push(`/panel/restaurantes/${r.id}/alta`);
             }}
           />
         </Modal>

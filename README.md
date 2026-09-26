@@ -1,77 +1,58 @@
-# Mesa3D
+# Mesa · Administración de cartas
 
-Plataforma de cartas digitales para varios restaurantes. Cada restaurante tiene un enlace y QR permanente, menú propio, precios, categorías y modelos 3D reemplazables. La carta pública se puede abrir sin cuenta; la administración utiliza permisos separados.
+Carta digital para varios restaurantes con fotografías, precios, secciones, disponibilidad, destacados y QR permanente.
 
-**Tecnologías:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, `<model-viewer>` 4, Supabase (PostgreSQL, Auth y Storage) y Vercel.
+## Probar localmente
 
-## Probar la demostración
+Requiere Node.js 22.6 o posterior.
 
-Requiere Node.js 22.6 o posterior (recomendado: la versión LTS disponible en Vercel).
-
-```bash
+```sh
 npm ci
 npm run dev
 ```
 
-- Carta de ejemplo: `http://localhost:3000/r/brasa`
-- Accesos de prueba: `http://localhost:3000/acceso`
-- Panel general: desde «Accesos de prueba», elegir «Panel general».
-- Panel de restaurante: elegir «Panel del restaurante» (solo administra BRASA).
+Abre `/acceso` para entrar al panel general o al panel de BRASA. La carta pública de ejemplo está en `/r/brasa`.
 
-Sin variables de Supabase, el proyecto funciona en **modo demostración**. Los cambios se guardan en el `localStorage` del navegador y no se comparten con otros dispositivos. Puedes restablecer el contenido de ejemplo desde el panel. Esta modalidad no debe emplearse para menús reales.
+Para la demostración local configura `NEXT_PUBLIC_DEMO_MODE=true` en `.env.local`, sin variables Supabase. Sin configuración la aplicación se bloquea: no activa la demo automáticamente. La demo permite entrar sin contraseña; sus cambios persisten en el navegador y se sincronizan entre sus pestañas, pero no entre dispositivos. La subida de fotografías propias requiere Supabase; la demo admite enlaces HTTPS y fotos del catálogo. El servidor local escucha únicamente en `127.0.0.1`.
 
-En el menú aparecen cuatro modelos 3D predeterminados. El aguacate tiene textura pintada y los de hamburguesa, pizza y torta son estilizados. Todas las fotos, porciones, alérgenos y precios de ejemplo deben revisarse con cada restaurante antes de su carta final.
+Para cuentas reales usa `NEXT_PUBLIC_DEMO_MODE=false` y configura Supabase. La demo está prohibida cuando `VERCEL_ENV=production` o `MESA_DEPLOYMENT_ENV=production`. Consulta [SEGURIDAD.md](SEGURIDAD.md) para el alcance de las comprobaciones.
 
-## Conectar Supabase para usar cuentas y datos compartidos
+## Funciones
 
-1. Crea un proyecto nuevo de Supabase dedicado a esta plataforma. **No reutilices una base de datos de otro proyecto.** Ejecuta `supabase/migrations/20260918180438_initial_restaurant_platform.sql` desde el SQL Editor, o usa Supabase CLI con el proyecto vinculado. Si quieres los dos restaurantes de prueba, ejecuta después `supabase/seed.sql`.
-2. Crea las dos cuentas de administradores desde Authentication → Users. Registra cada ID de usuario como administrador general desde el SQL Editor:
+- Crear restaurantes y personalizar nombre, descripción, ubicación, horarios, color y moneda.
+- Crear, editar y eliminar platos; precio con dos decimales, descripción, fotografía y alérgenos.
+- Añadir, renombrar y ordenar secciones; el cambio de nombre mueve sus platos en una transacción. Para eliminar una sección primero mueve sus platos desde el editor.
+- Buscar platos y filtrar por sección, disponibilidad o destacados.
+- Duplicar platos como ocultos y ordenar platos dentro de su sección.
+- Publicar/despublicar cartas sin cambiar el enlace permanente.
+- Descargar y copiar QR/enlace; exportar el contenido de una carta como JSON (exportación, sin importador).
+- Separación de permisos entre administración general y encargados de restaurantes.
+- Visualización exclusivamente fotográfica, con imagen alternativa si el archivo falla.
 
-   ```sql
-   insert into public.platform_admins (user_id)
-   select id from auth.users where email = 'correo-del-administrador@ejemplo.com';
-   ```
+## Datos reales
 
-   Repite el comando para el segundo administrador con su correo. Las contraseñas se configuran en Supabase; **no se guardan en el código**.
-3. Para un restaurante, crea su cuenta desde Authentication → Users, y asígnale acceso a su propio menú:
+Sigue [CONFIGURACION.md](CONFIGURACION.md). Ejecuta **todas las migraciones en orden**, no solo la inicial. En instalaciones existentes aplica únicamente las pendientes. La migración `20260925172332_menu_management_images.sql` añade las operaciones atómicas de secciones y orden, restringe las subidas a imágenes de 5 MB y elimina las columnas del antiguo visor. No elimina platos, fotografías ni restaurantes. Los antiguos objetos del almacenamiento remoto no se borran automáticamente.
 
-   ```sql
-   insert into public.restaurant_members (restaurant_id, user_id)
-   select r.id, u.id
-   from public.restaurants r cross join auth.users u
-   where r.slug = 'brasa' and u.email = 'encargado@ejemplo.com';
-   ```
-
-4. Copia `.env.example` a `.env.local` e indica la URL y la **publishable key** de Supabase. Necesitas ambas. Nunca pongas la secret key ni la antigua `service_role` en una variable `NEXT_PUBLIC_`.
-5. Ejecuta `npm run build`, `npm run dev`. Comprueba con dos cuentas que cada restaurante ve y modifica únicamente sus datos. El esquema incluye políticas RLS para menús, integrantes, platos y archivos.
-
-El panel permite subir imágenes JPEG/PNG/WebP y archivos GLB/USDZ a Supabase Storage; para los modelos alojados fuera de Supabase usa enlaces HTTPS que permitan peticiones del navegador. Los modelos GLB deben estar a escala física correcta para que la realidad aumentada represente el plato con fidelidad. En iPhone, Quick Look puede generar USDZ automáticamente; un USDZ preparado permite controlar mejor el resultado. La realidad aumentada depende del celular y su navegador.
-
-## Desplegar en Vercel
-
-1. Sube este proyecto a un repositorio propio de GitHub y conéctalo a Vercel como proyecto **Next.js**. El código se compila con `npm run build`.
-2. Configura `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` y `NEXT_PUBLIC_SITE_URL` con tu dominio HTTPS definitivo. Si aún no conectaste Supabase, publica únicamente una demostración; el panel señalará que los cambios son locales.
-3. Abre la carta en un teléfono Android y en un iPhone para comprobar carga, giro, zoom y disponibilidad de AR. Genera y descarga los QR definitivos una vez configurado el dominio; así los QR impresos conservarán su destino.
+Configura las variables de `.env.example`. La cuenta del administrador inicial se crea en Supabase Authentication; después puedes asignar encargados desde Alta y entrega. Sigue CONFIGURACION.md para la configuración. No incluyas claves secretas en variables públicas.
 
 ## Verificación
 
-```bash
+```sh
 npm run typecheck
 npm run test:unit
-npm run test:assets
-npm run build
 npm run test:security
+npm run build
 npm run test:smoke
 npx playwright install chromium
 npm run test:e2e
 ```
 
-`test:security` ejecuta la migración en PGlite, simula usuarios anónimos, administradores y encargados de dos restaurantes y comprueba el aislamiento de sus datos. `test:smoke` verifica que el servidor de producción entregue las páginas y los cuatro archivos GLB. **Esto no sustituye una prueba final de Auth y Storage en un proyecto real de Supabase ni una revisión visual en Android y iPhone**.
+Las pruebas de navegador requieren una compilación en modo demo y cubren escritorio y móvil. Las pruebas de base de datos ejecutan las migraciones en PGlite y verifican aislamiento entre restaurantes, renombrado, eliminación protegida y orden. Auth y subidas a Storage deben comprobarse además en el proyecto Supabase real.
 
-`test:assets` también comprueba las texturas externas referenciadas por los GLB. Se ejecuta automáticamente antes de compilar para evitar modelos incompletos. `test:e2e` recorre la demo en escritorio y móvil: categorías, modelos, edición, disponibilidad, borradores, QR, accesos, errores de carga y sincronización de pestañas. Compila **sin variables Supabase** para estas pruebas; el recorrido se detiene si detecta el acceso de cuentas reales. La emulación móvil no comprueba la cámara física ni ARKit/ARCore.
+Fuentes de las fotografías: [ASSETS.md](ASSETS.md).
 
-La guía paso a paso para conectar tus cuentas está en [CONFIGURACION.md](CONFIGURACION.md). El historial de esta revisión está en [CAMBIOS.md](CAMBIOS.md).
+## Alta comercial
 
-## Licencias y atribuciones
+El panel general incorpora **Alta y entrega**: datos privados del cliente, acceso del encargado, preparación de carta y entrega de QR/cartel. Los contactos reales se guardan en una tabla protegida por RLS; la gestión de Supabase Auth se ejecuta exclusivamente en el servidor tras verificar la sesión y el rol de administrador general.
 
-Las fuentes y licencias de los recursos predeterminados están en [ASSETS.md](ASSETS.md). Los cuatro modelos se distribuyen bajo CC0; las fotografías de menú de Unsplash son ilustrativas. Conserva el archivo de licencia de Kenney y la referencia a las fuentes cuando reutilices el paquete.
+Requiere la migración `20260925175146_client_onboarding.sql`, `SUPABASE_SECRET_KEY` solo en el servidor y un dominio público. Consulta CONFIGURACION.md para activación y recuperación. Los accesos de demo son simulados. Referencia comercial y precios sugeridos: [PRECIOS.md](PRECIOS.md).

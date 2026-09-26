@@ -12,12 +12,11 @@ try {
     if (Date.now()-started > 20000) throw new Error(`Server did not start: ${output}`);
     await new Promise(resolve => setTimeout(resolve,200));
   }
-  for (const [path,type] of [['/r/brasa','text/html'],['/acceso','text/html'],['/panel','text/html'],['/models/avocado.glb','model/gltf-binary'],['/models/burger.glb','model/gltf-binary'],['/models/pizza.glb','model/gltf-binary'],['/models/cake.glb','model/gltf-binary'],['/media/burger.jpg','image/jpeg']]) {
+  for (const [path,type] of [['/r/brasa','text/html'],['/acceso','text/html'],['/panel','text/html'],['/media/burger.jpg','image/jpeg']]) {
     const response=await fetch(`http://127.0.0.1:${port}${path}`);
     assert.equal(response.status,200,`${path} status`);
     if (type === 'text/html') assert.match(response.headers.get('content-type')??'',/text\/html/);
     const bytes=new Uint8Array(await response.arrayBuffer());
-    if (type==='model/gltf-binary') assert.equal(Buffer.from(bytes.subarray(0,4)).toString(),'glTF');
     if (type==='image/jpeg') assert.deepEqual([...bytes.subarray(0,2)],[0xff,0xd8]);
     console.log(`PASS ${path} (${bytes.length} bytes)`);
   }

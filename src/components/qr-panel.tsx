@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Download, Copy, Check, ExternalLink } from "lucide-react";
 import type { Restaurant } from "@/lib/types";
 import { menuUrl } from "@/lib/site-url";
+import { qrPoster } from "@/lib/qr-poster";
 import { Notice } from "./ui";
 import { useApp } from "./provider";
 
@@ -11,6 +12,7 @@ export function QrPanel({ restaurant }: { restaurant: Restaurant }) {
   const { demo } = useApp();
   const [url, setUrl] = useState(""),
     [png, setPng] = useState(""),
+    [poster, setPoster] = useState(""),
     [copied, setCopied] = useState(false),
     [error, setError] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -18,6 +20,7 @@ export function QrPanel({ restaurant }: { restaurant: Restaurant }) {
     let stopped = false;
     setUrl("");
     setPng("");
+    setPoster("");
     setError("");
     setCopied(false);
     async function generate() {
@@ -35,7 +38,17 @@ export function QrPanel({ restaurant }: { restaurant: Restaurant }) {
           errorCorrectionLevel: "H",
           color: { dark: "#20241f", light: "#ffffff" },
         });
-        if (!stopped) setPng(image);
+        const svg = await q.toString(link, {
+          type: "svg",
+          margin: 4,
+          errorCorrectionLevel: "H",
+        });
+        if (!stopped) {
+          setPng(image);
+          setPoster(
+            `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrPoster(restaurant.name, restaurant.accent, link, svg))}`,
+          );
+        }
       } catch (e) {
         if (!stopped)
           setError(
@@ -50,7 +63,7 @@ export function QrPanel({ restaurant }: { restaurant: Restaurant }) {
       stopped = true;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [restaurant.slug]);
+  }, [restaurant.slug, restaurant.name, restaurant.accent]);
   const local =
     url &&
     ["terminal.local", "localhost", "127.0.0.1", "[::1]"].includes(
@@ -105,6 +118,15 @@ export function QrPanel({ restaurant }: { restaurant: Restaurant }) {
             </Notice>
           ) : null}
           <div className="actions">
+            {poster ? (
+              <a
+                className="btn"
+                href={poster}
+                download={`cartel-${restaurant.slug}.svg`}
+              >
+                <Download size={17} /> Descargar cartel
+              </a>
+            ) : null}
             {png ? (
               <a
                 className="btn primary"

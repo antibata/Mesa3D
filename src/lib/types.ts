@@ -19,11 +19,8 @@ export type Dish = {
   price: number;
   category: string;
   image_url: string;
-  model_url: string;
-  usdz_url: string;
   available: boolean;
   featured: boolean;
-  demo_model: boolean;
   allergens: string;
   sort_order: number;
 };

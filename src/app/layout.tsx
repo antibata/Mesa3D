@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { AppProvider } from "@/components/provider";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: { default: "Mesa3D · La carta cobra vida", template: "%s · Mesa3D" },
+  title: { default: "Mesa · La carta cobra vida", template: "%s · Mesa" },
   description:
-    "Cartas digitales con modelos 3D y realidad aumentada para restaurantes.",
+    "Cartas digitales con fotografías y administración de menús para restaurantes.",
   icons: { icon: "/favicon.svg" },
 };
 export default function RootLayout({

@@ -1,10 +1,8 @@
 "use client";
 import { useState, type CSSProperties } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  Box,
   MapPin,
   Clock3,
   Utensils,
@@ -15,21 +13,34 @@ import { useApp } from "./provider";
 import { Brand, Modal, Notice, Photo } from "./ui";
 import { priceLabel } from "@/lib/validation";
 import type { Dish } from "@/lib/types";
-const FoodViewer = dynamic(
-  () => import("./model-viewer").then((v) => v.FoodViewer),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="viewer-wrap viewer-loading">Preparando vista 3D…</div>
-    ),
-  },
-);
-export function MenuPage({ slug }: { slug: string }) {
-  const { restaurants, dishes, loading, demo, error, reload, resetDemo } =
-    useApp();
+export function MenuPage({
+  slug,
+  previewId,
+}: {
+  slug?: string;
+  previewId?: string;
+}) {
+  const {
+    restaurants,
+    dishes,
+    loading,
+    demo,
+    error,
+    reload,
+    resetDemo,
+    access,
+  } = useApp();
   const [category, setCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<Dish | null>(null);
-  const restaurant = restaurants.find((r) => r.slug === slug && r.published);
+  const canPreview = Boolean(
+    previewId &&
+    (access?.kind === "platform" || access?.restaurantIds.includes(previewId)),
+  );
+  const restaurant = restaurants.find((r) =>
+    previewId
+      ? canPreview && r.id === previewId
+      : r.slug === slug && r.published,
+  );
   if (loading)
     return (
       <div className="page-loading">
@@ -75,7 +86,13 @@ export function MenuPage({ slug }: { slug: string }) {
     );
   const menu = dishes
     .filter((d) => d.restaurant_id === restaurant.id && d.available)
-    .sort((a, b) => a.sort_order - b.sort_order);
+    .sort(
+      (a, b) =>
+        restaurant.categories.indexOf(a.category) -
+          restaurant.categories.indexOf(b.category) ||
+        a.sort_order - b.sort_order ||
+        a.id.localeCompare(b.id),
+    );
   const activeCategory =
     category && restaurant.categories.includes(category) ? category : null;
   const shown =
@@ -90,7 +107,13 @@ export function MenuPage({ slug }: { slug: string }) {
       <div className="demo-top">
         <div className="container demo-top-inner">
           <Brand dark />
-          <span>{demo ? "RESTAURANTE DE DEMOSTRACIÓN" : "CARTA DIGITAL"}</span>
+          <span>
+            {canPreview
+              ? "VISTA PREVIA PRIVADA"
+              : demo
+                ? "RESTAURANTE DE DEMOSTRACIÓN"
+                : "CARTA DIGITAL"}
+          </span>
         </div>
       </div>
       <header className="restaurant-header">
@@ -156,12 +179,7 @@ export function MenuPage({ slug }: { slug: string }) {
             <h2>{activeCategory ?? "Nuestra carta"}</h2>
           </div>
           <div className="menu-hint">
-            <Box size={21} />
-            <span>
-              Los platos con <b>3D</b>
-              <br />
-              se pueden explorar de cerca.
-            </span>
+            Fotos, ingredientes y precios al alcance de tu mano.
           </div>
         </div>
         {shown.length ? (
@@ -173,15 +191,9 @@ export function MenuPage({ slug }: { slug: string }) {
                 onClick={() => setSelected(d)}
                 aria-label={`Ver ${d.name}`}
               >
-                <div
-                  className={`dish-photo ${d.model_url ? "model-photo" : ""}`}
-                >
+                <div className="dish-photo">
                   <Photo src={d.image_url} alt={d.name} priority={i < 3} />
-                  {d.model_url ? (
-                    <span className="badge badge-3d">
-                      <Box size={14} /> Explorar en 3D
-                    </span>
-                  ) : d.featured ? (
+                  {d.featured ? (
                     <span className="badge badge-white">De la casa</span>
                   ) : null}
                   <span className="card-arrow">
@@ -198,8 +210,7 @@ export function MenuPage({ slug }: { slug: string }) {
                   </div>
                   <p>{d.description}</p>
                   <span className="dish-more">
-                    {d.model_url ? "Descubre el plato" : "Ver detalle"}{" "}
-                    <ChevronRight size={15} />
+                    Ver detalle <ChevronRight size={15} />
                   </span>
                 </div>
               </button>
@@ -216,7 +227,7 @@ export function MenuPage({ slug }: { slug: string }) {
           <Sparkles size={17} />
           <p>
             {demo
-              ? "Carta de ejemplo. Las fotos, los precios y los modelos son ilustrativos. Los modelos pueden diferir de las fotografías."
+              ? "Carta de ejemplo. Las fotos y los precios son ilustrativos."
               : "¿Tienes alguna alergia? Consulta con nuestro equipo antes de pedir."}
           </p>
           <span>Precios en {restaurant.currency}</span>
@@ -229,9 +240,7 @@ export function MenuPage({ slug }: { slug: string }) {
       </footer>
       {selected ? (
         <Modal title={selected.name} onClose={() => setSelected(null)} wide>
-          <div
-            className={`dish-detail ${selected.model_url ? "with-model" : ""}`}
-          >
+          <div className="dish-detail">
             <div className="detail-info">
               <span className="eyebrow dark">{selected.category}</span>
               <h2>{selected.name}</h2>
@@ -249,25 +258,12 @@ export function MenuPage({ slug }: { slug: string }) {
                   Consulta al restaurante por alérgenos y posibles trazas.
                 </p>
               )}
-              {selected.demo_model ? (
-                <div className="model-note">
-                  <Box size={18} />
-                  <span>
-                    Modelo de demostración. Su apariencia puede diferir de la
-                    foto y el tamaño es orientativo.
-                  </span>
-                </div>
-              ) : null}
             </div>
-            {selected.model_url ? (
-              <FoodViewer key={selected.model_url} dish={selected} />
-            ) : (
-              <Photo
-                src={selected.image_url}
-                alt={selected.name}
-                className="detail-photo"
-              />
-            )}
+            <Photo
+              src={selected.image_url}
+              alt={selected.name}
+              className="detail-photo"
+            />
           </div>
         </Modal>
       ) : null}

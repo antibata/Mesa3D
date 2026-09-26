@@ -23,7 +23,7 @@ export default function AccessPage() {
       <section className="access-story">
         <Brand dark />
         <div className="access-story-content">
-          <span className="eyebrow">TU CARTA, CON OTRA DIMENSIÓN</span>
+          <span className="eyebrow">TU CARTA, SIEMPRE AL DÍA</span>
           <h1>
             El próximo plato
             <br />
@@ -35,7 +35,7 @@ export default function AccessPage() {
             Todos tus restaurantes, sus cartas y sus platos en un mismo lugar.
           </p>
         </div>
-        <small>Mesa3D · Plataforma para restaurantes</small>
+        <small>Mesa · Plataforma para restaurantes</small>
       </section>
       <section className="access-form">
         <div className="access-box">
@@ -124,10 +124,7 @@ export default function AccessPage() {
               <button className="btn primary" disabled={busy}>
                 {busy ? "Ingresando…" : "Ingresar"}
               </button>
-              <p className="subtle">
-                Si necesitas acceso o recuperar tu cuenta, contacta con el
-                administrador de la plataforma.
-              </p>
+              <Link className="back-link" href="/recuperar">Olvidé mi contraseña</Link>
             </form>
           )}
           <Link className="back-link" href={app.demo ? "/r/brasa" : "/"}>

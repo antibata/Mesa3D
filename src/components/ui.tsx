@@ -2,15 +2,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Box, X, UtensilsCrossed } from "lucide-react";
+import { X, UtensilsCrossed } from "lucide-react";
 import { isAssetUrl } from "@/lib/validation";
 export function Brand({ dark = false }: { dark?: boolean }) {
   return (
     <Link className={`brand ${dark ? "brand-light" : ""}`} href="/">
       <span className="brand-mark">
-        <Box size={23} strokeWidth={1.7} />
+        <UtensilsCrossed size={23} strokeWidth={1.7} />
       </span>
-      Mesa<span className="brand-suffix">3D</span>
+      Mesa<span className="brand-suffix"> · menú</span>
     </Link>
   );
 }

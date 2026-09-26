@@ -58,6 +58,8 @@ export function Workspace({
       app.access?.kind === "platform" ||
       app.access?.restaurantIds.includes(r.id),
   );
+  if (app.access.kind === "restaurant" && !app.access.restaurantIds.length)
+    return <div className="page-loading"><Brand/><h1>Cuenta sin acceso asignado</h1><p>Contacta al administrador para que te asigne un restaurante.</p><button className="btn" disabled={leaving} onClick={()=>void logout()}>Salir</button>{logoutError?<Notice error>{logoutError}</Notice>:null}</div>;
   return (
     <div className="workspace">
       <aside className="sidebar">

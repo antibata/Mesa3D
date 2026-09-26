@@ -22,6 +22,13 @@ type Context = AppData & {
   saveRestaurant: (r: Restaurant) => Promise<void>;
   saveDish: (d: Dish) => Promise<void>;
   deleteDish: (id: string) => Promise<void>;
+  saveSections: (
+    id: string,
+    categories: string[],
+    previous: string[],
+    rename?: { from: string; to: string },
+  ) => Promise<void>;
+  reorderDishes: (id: string, ids: string[]) => Promise<void>;
   enterDemo: (role: "platform" | "restaurant") => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -135,8 +142,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (d.error) throw new Error("No se pudieron cargar los platos.");
       if (current()) {
         latestData.current = {
-          restaurants: r.data ?? [],
-          dishes: d.data ?? [],
+          restaurants: (r.data ?? []).map((v) => restaurantSchema.parse(v)),
+          dishes: (d.data ?? []).map((v) => dishSchema.parse(v)),
         };
         setData(latestData.current);
       }
@@ -175,19 +182,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     void reload();
     let disposed = false;
-    const { data: subscription } = supabase!.auth.onAuthStateChange((event, session) => {
-      // Supabase also emits SIGNED_IN when a tab regains focus. Do not erase
-      // an open form just because the same user refocuses or refreshes a token.
-      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
-      if (event === "SIGNED_IN" && session?.user.id === authUserId.current) return;
-      if (event === "SIGNED_OUT") {
-        authUserId.current = null; requestId.current++;
-        setAccess(null); latestData.current = { restaurants: [], dishes: [] }; setData(latestData.current);
-      }
-      setTimeout(() => {
-        if (!disposed) void reload();
-      }, 0);
-    });
+    const { data: subscription } = supabase!.auth.onAuthStateChange(
+      (event, session) => {
+        // Supabase also emits SIGNED_IN when a tab regains focus. Do not erase
+        // an open form just because the same user refocuses or refreshes a token.
+        if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
+        if (event === "SIGNED_IN" && session?.user.id === authUserId.current)
+          return;
+        if (event === "SIGNED_OUT") {
+          authUserId.current = null;
+          requestId.current++;
+          setAccess(null);
+          latestData.current = { restaurants: [], dishes: [] };
+          setData(latestData.current);
+        }
+        setTimeout(() => {
+          if (!disposed) void reload();
+        }, 0);
+      },
+    );
     return () => {
       disposed = true;
       requestId.current++;
@@ -224,6 +237,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw new Error("No tienes acceso a este restaurante.");
     if (existing && existing.slug !== r.slug)
       throw new Error("El enlace es permanente para conservar el código QR.");
+    if (
+      latestData.current.dishes.some(
+        (d) => d.restaurant_id === r.id && !r.categories.includes(d.category),
+      )
+    )
+      throw new Error("Mueve los platos antes de eliminar su sección.");
     if (
       latestData.current.restaurants.some(
         (v) => v.slug === r.slug && v.id !== r.id,
@@ -274,6 +293,93 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dishes: previous.dishes.some((v) => v.id === d.id)
         ? previous.dishes.map((v) => (v.id === d.id ? d : v))
         : [...previous.dishes, d],
+    }));
+  }
+  async function saveSections(
+    id: string,
+    categories: string[],
+    previous: string[],
+    rename?: { from: string; to: string },
+  ) {
+    const r = latestData.current.restaurants.find((v) => v.id === id);
+    if (!r || !canManage(id))
+      throw new Error("No tienes acceso a este restaurante.");
+    if (JSON.stringify(r.categories) !== JSON.stringify(previous))
+      throw new Error("Las secciones cambiaron. Vuelve a abrir el editor.");
+    const parsed = restaurantSchema.shape.categories.safeParse(categories);
+    if (!parsed.success)
+      throw new Error(
+        "Usa entre 1 y 20 secciones con nombres únicos de hasta 60 caracteres.",
+      );
+    const names = parsed.data;
+    if (
+      rename &&
+      (!previous.includes(rename.from) || !names.includes(rename.to))
+    )
+      throw new Error("Sección no válida.");
+    const nextDishes = latestData.current.dishes.map((d) =>
+      d.restaurant_id === id && rename && d.category === rename.from
+        ? { ...d, category: rename.to }
+        : d,
+    );
+    if (
+      nextDishes.some(
+        (d) => d.restaurant_id === id && !names.includes(d.category),
+      )
+    )
+      throw new Error(
+        "Esta sección contiene platos. Muévelos a otra sección antes de eliminarla.",
+      );
+    if (supabase) {
+      const { error } = await supabase.rpc("manage_menu_sections", {
+        p_id: id,
+        p_categories: names,
+        p_previous: previous,
+        p_from: rename?.from ?? null,
+        p_to: rename?.to ?? null,
+      });
+      if (error)
+        throw new Error(
+          "No se guardaron las secciones. Recarga para comprobar cambios de otro administrador y verifica que las migraciones estén aplicadas.",
+        );
+    }
+    commit((p) => ({
+      restaurants: p.restaurants.map((v) =>
+        v.id === id ? { ...v, categories: names } : v,
+      ),
+      dishes: p.dishes.map((d) =>
+        d.restaurant_id === id && rename && d.category === rename.from
+          ? { ...d, category: rename.to }
+          : d,
+      ),
+    }));
+  }
+  async function reorderDishes(id: string, ids: string[]) {
+    if (!canManage(id)) throw new Error("No tienes acceso a este restaurante.");
+    const current = latestData.current.dishes.filter(
+      (d) => d.restaurant_id === id,
+    );
+    if (
+      ids.length !== current.length ||
+      new Set(ids).size !== ids.length ||
+      current.some((d) => !ids.includes(d.id))
+    )
+      throw new Error("La carta cambió. Recarga antes de reordenar.");
+    if (supabase) {
+      const { error } = await supabase.rpc("reorder_menu_dishes", {
+        p_id: id,
+        p_ids: ids,
+      });
+      if (error)
+        throw new Error(
+          "No se guardó el orden. Recarga la carta y vuelve a intentarlo.",
+        );
+    }
+    commit((p) => ({
+      ...p,
+      dishes: p.dishes.map((d) =>
+        d.restaurant_id === id ? { ...d, sort_order: ids.indexOf(d.id) } : d,
+      ),
     }));
   }
   async function deleteDish(id: string) {
@@ -343,6 +449,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isDemo) {
       try {
         commit(() => freshSeed());
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith("mesa-onboarding:")) localStorage.removeItem(key);
+        }
         setError("");
       } catch (e) {
         setError(message(e));
@@ -360,6 +469,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         saveRestaurant,
         saveDish,
         deleteDish,
+        saveSections,
+        reorderDishes,
         enterDemo,
         login,
         logout,

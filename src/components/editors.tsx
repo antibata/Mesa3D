@@ -1,11 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Box, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import type { Dish, Restaurant } from "@/lib/types";
 import { useApp } from "./provider";
-import { Notice } from "./ui";
+import { Notice, Photo } from "./ui";
 import { supabase } from "@/lib/supabase";
-import { modelPresets } from "@/lib/seed";
 const errMessage = (e: unknown) =>
   e instanceof Error
     ? e.name === "ZodError"
@@ -33,10 +32,12 @@ export function RestaurantForm({
         setBusy(true);
         setError("");
         try {
-          const categories = String(fd.get("categories"))
-            .split("\n")
-            .map((v) => v.trim())
-            .filter(Boolean);
+          const categories = restaurant
+            ? restaurant.categories
+            : String(fd.get("categories"))
+                .split("\n")
+                .map((v) => v.trim())
+                .filter(Boolean);
           if (
             restaurant &&
             app.dishes.some(
@@ -159,22 +160,27 @@ export function RestaurantForm({
             </select>
           </label>
         </div>
-        <label className="field">
-          Categorías de la carta
-          <textarea
-            name="categories"
-            required
-            defaultValue={(
-              restaurant?.categories ?? [
+        {!restaurant ? (
+          <label className="field">
+            Categorías de la carta
+            <textarea
+              name="categories"
+              required
+              defaultValue={[
                 "Para empezar",
                 "Principales",
                 "Postres",
                 "Bebidas",
-              ]
-            ).join("\n")}
-          />
-          <small>Una por línea. Se mostrarán en este orden.</small>
-        </label>
+              ].join("\n")}
+            />
+            <small>Una por línea. Se mostrarán en este orden.</small>
+          </label>
+        ) : (
+          <p className="subtle">
+            Gestiona los nombres y el orden de las categorías en la pestaña
+            Secciones.
+          </p>
+        )}
         <label className="check-label">
           <input
             type="checkbox"
@@ -216,33 +222,19 @@ export function DishForm({
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [uploading, setUploading] = useState(false);
-  const [image, setImage] = useState(dish?.image_url ?? ""),
-    [model, setModel] = useState(dish?.model_url ?? ""),
-    [usdz, setUsdz] = useState(dish?.usdz_url ?? ""),
-    [isExample, setIsExample] = useState(dish?.demo_model ?? false);
-  async function upload(
-    file: File | undefined,
-    kind: "image" | "model" | "usdz",
-  ) {
+  const [image, setImage] = useState(dish?.image_url ?? "");
+  async function upload(file: File | undefined) {
     if (!file || !supabase) return;
     setError("");
     setUploading(true);
     try {
-      const max = kind === "image" ? 5 : 25;
+      const max = 5;
       if (!file.size)
         throw new Error("El archivo está vacío. Selecciona otro archivo.");
       if (file.size > max * 1024 * 1024)
         throw new Error(`El archivo no debe superar ${max} MB.`);
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-      if (
-        !(
-          kind === "image"
-            ? ["jpg", "jpeg", "png", "webp"]
-            : kind === "model"
-              ? ["glb"]
-              : ["usdz"]
-        ).includes(ext)
-      )
+      if (!["jpg", "jpeg", "png", "webp"].includes(ext))
         throw new Error("Ese formato de archivo no es válido.");
       const path = `${restaurant.id}/${crypto.randomUUID()}.${ext}`;
       const imageMime =
@@ -255,24 +247,14 @@ export function DishForm({
         .from("dish-media")
         .upload(path, file, {
           upsert: false,
-          contentType:
-            kind === "model"
-              ? "model/gltf-binary"
-              : kind === "usdz"
-                ? "model/vnd.usdz+zip"
-                : imageMime,
+          contentType: imageMime,
         });
       if (error)
         throw new Error(
           "No se pudo subir el archivo. Comprueba la conexión y tus permisos.",
         );
       const { data } = supabase.storage.from("dish-media").getPublicUrl(path);
-      if (kind === "image") setImage(data.publicUrl);
-      else if (kind === "model") {
-        setModel(data.publicUrl);
-        setUsdz("");
-        setIsExample(false);
-      } else setUsdz(data.publicUrl);
+      setImage(data.publicUrl);
     } catch (e) {
       setError(errMessage(e));
     } finally {
@@ -296,16 +278,17 @@ export function DishForm({
             price: Number(fd.get("price")),
             category: String(fd.get("category")),
             image_url: image,
-            model_url: model,
-            usdz_url: usdz,
             available: fd.has("available"),
             featured: fd.has("featured"),
-            demo_model: isExample,
             allergens: String(fd.get("allergens")),
             sort_order:
               dish?.sort_order ??
-              app.dishes.filter((v) => v.restaurant_id === restaurant.id)
-                .length,
+              Math.max(
+                -1,
+                ...app.dishes
+                  .filter((v) => v.restaurant_id === restaurant.id)
+                  .map((v) => v.sort_order),
+              ) + 1,
           });
           onSaved();
         } catch (e) {
@@ -317,205 +300,143 @@ export function DishForm({
     >
       {error ? <Notice error>{error}</Notice> : null}
       <fieldset disabled={busy || uploading}>
-      <label className="field">
-        Nombre del plato
-        <input
-          name="name"
-          required
-          minLength={2}
-          maxLength={100}
-          defaultValue={dish?.name}
-        />
-      </label>
-      <label className="field">
-        Descripción
-        <textarea
-          name="description"
-          maxLength={600}
-          defaultValue={dish?.description}
-        />
-      </label>
-      <div className="form-grid">
         <label className="field">
-          Precio ({restaurant.currency})
+          Nombre del plato
           <input
-            name="price"
-            type="number"
-            min="0"
-            max="10000000"
-            step="0.01"
+            name="name"
             required
-            defaultValue={dish?.price ?? 0}
+            minLength={2}
+            maxLength={100}
+            defaultValue={dish?.name}
           />
         </label>
         <label className="field">
-          Categoría
-          <select
-            name="category"
-            defaultValue={dish?.category ?? restaurant.categories[0]}
-          >
-            {restaurant.categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <label className="field">
-        Alérgenos declarados
-        <input
-          name="allergens"
-          maxLength={250}
-          defaultValue={dish?.allergens}
-          placeholder="Ej. Gluten, leche, huevo"
-        />
-        <small>Confirma esta información con el restaurante.</small>
-      </label>
-      <label className="field">
-        Fotografía · enlace HTTPS
-        <input
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-          placeholder="https://…"
-        />
-      </label>
-      {!app.demo ? (
-        <label className="field">
-          <span>
-            <Upload size={14} className="inline" /> O subir fotografía
-          </span>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={uploading}
-            onChange={(e) => void upload(e.target.files?.[0], "image")}
+          Descripción
+          <textarea
+            name="description"
+            maxLength={600}
+            defaultValue={dish?.description}
           />
-          <small>JPG, PNG o WebP · máximo 5 MB</small>
         </label>
-      ) : null}
-      <hr className="form-divider" />
-      <h3 className="form-title">
-        <Box size={19} /> Modelo 3D
-      </h3>
-      <label className="field">
-        Modelo de ejemplo
-        <select
-          value={
-            modelPresets.some((m) => m.url === model)
-              ? model
-              : model
-                ? "custom"
-                : ""
-          }
-          onChange={(e) => {
-            const preset = modelPresets.find((p) => p.url === e.target.value);
-            setModel(preset?.url ?? "");
-            setUsdz("");
-            setIsExample(Boolean(preset));
-            if (preset) setImage(preset.image);
-          }}
-        >
-          <option value="">Sin modelo 3D</option>
-          {modelPresets.map((p) => (
-            <option key={p.url} value={p.url}>
-              {p.label}
-            </option>
-          ))}
-          {model && !modelPresets.some((m) => m.url === model) ? (
-            <option value="custom">Modelo personalizado</option>
-          ) : null}
-        </select>
-      </label>
-      <label className="field">
-        Archivo GLB · enlace HTTPS
-        <input
-          value={model}
-          onChange={(e) => {
-            setModel(e.target.value);
-            setUsdz("");
-            setIsExample(false);
-          }}
-          placeholder="https://…/plato.glb"
-        />
-        <small>
-          El archivo debe permitir su carga desde esta web. Recomendado: menos
-          de 10 MB.
-        </small>
-      </label>
-      <label className="field">
-        Archivo USDZ para iPhone · opcional
-        <input
-          value={usdz}
-          onChange={(e) => setUsdz(e.target.value)}
-          placeholder="https://…/plato.usdz"
-        />
-        <small>
-          Si no lo cargas, el visor intentará generarlo al abrir la realidad
-          aumentada.
-        </small>
-      </label>
-      {!app.demo ? (
         <div className="form-grid">
           <label className="field">
-            Subir GLB
+            Precio ({restaurant.currency})
             <input
-              type="file"
-              accept=".glb"
-              disabled={uploading}
-              onChange={(e) => void upload(e.target.files?.[0], "model")}
+              name="price"
+              type="number"
+              min="0"
+              max="10000000"
+              step="0.01"
+              required
+              defaultValue={dish?.price ?? 0}
             />
           </label>
           <label className="field">
-            Subir USDZ
-            <input
-              type="file"
-              accept=".usdz"
-              disabled={uploading}
-              onChange={(e) => void upload(e.target.files?.[0], "usdz")}
-            />
+            Categoría
+            <select
+              name="category"
+              defaultValue={dish?.category ?? restaurant.categories[0]}
+            >
+              {restaurant.categories.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
           </label>
         </div>
-      ) : (
-        <p className="subtle">
-          En esta demo puedes cambiar el modelo de ejemplo o pegar un enlace
-          HTTPS. La subida de archivos propios se habilita al conectar Supabase.
-        </p>
-      )}
-      <label className="check-label">
-        <input
-          type="checkbox"
-          checked={isExample}
-          onChange={(e) => setIsExample(e.target.checked)}
-        />{" "}
-        Identificar como modelo de demostración
-      </label>
-      <label className="check-label">
-        <input
-          type="checkbox"
-          name="available"
-          defaultChecked={dish?.available ?? true}
-        />{" "}
-        Disponible en la carta
-      </label>
-      <label className="check-label">
-        <input
-          type="checkbox"
-          name="featured"
-          defaultChecked={dish?.featured ?? false}
-        />{" "}
-        Destacar como plato de la casa
-      </label>
-      <div className="form-actions">
-        <button type="button" className="btn" onClick={onCancel}>
-          Cancelar
+        <label className="field">
+          Alérgenos declarados
+          <input
+            name="allergens"
+            maxLength={250}
+            defaultValue={dish?.allergens}
+            placeholder="Ej. Gluten, leche, huevo"
+          />
+          <small>Confirma esta información con el restaurante.</small>
+        </label>
+        <label className="field">
+          Fotografía · enlace HTTPS
+          <input
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="https://…"
+          />
+        </label>
+        {app.demo ? (
+          <p className="subtle">
+            En la demo puedes usar un enlace HTTPS o una fotografía del
+            catálogo. La subida de archivos se habilita al conectar Supabase.
+          </p>
+        ) : null}
+        <label className="field">
+          Fotografía del catálogo
+          <select
+            value={
+              [
+                "/media/avocado.jpg",
+                "/media/burger.jpg",
+                "/media/pizza.jpg",
+                "/media/dessert.jpg",
+              ].includes(image)
+                ? image
+                : ""
+            }
+            onChange={(e) => setImage(e.target.value)}
+          >
+            <option value="">Sin selección</option>
+            <option value="/media/avocado.jpg">Palta</option>
+            <option value="/media/burger.jpg">Hamburguesa</option>
+            <option value="/media/pizza.jpg">Pizza</option>
+            <option value="/media/dessert.jpg">Postre</option>
+          </select>
+        </label>
+        {!app.demo ? (
+          <label className="field">
+            <span>
+              <Upload size={14} className="inline" /> O subir fotografía
+            </span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploading}
+              onChange={(e) => void upload(e.target.files?.[0])}
+            />
+            <small>JPG, PNG o WebP · máximo 5 MB</small>
+          </label>
+        ) : null}
+        <div className="image-preview">
+          <Photo src={image} alt="Vista previa de la fotografía" />
+        </div>
+        <button type="button" className="btn sm" onClick={() => setImage("")}>
+          Quitar fotografía
         </button>
-        <button className="btn primary" disabled={busy || uploading}>
-          {uploading
-            ? "Subiendo archivo…"
-            : busy
-              ? "Guardando…"
-              : "Guardar plato"}
-        </button>
-      </div>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            name="available"
+            defaultChecked={dish?.available ?? true}
+          />{" "}
+          Disponible en la carta
+        </label>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            name="featured"
+            defaultChecked={dish?.featured ?? false}
+          />{" "}
+          Destacar como plato de la casa
+        </label>
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button className="btn primary" disabled={busy || uploading}>
+            {uploading
+              ? "Subiendo archivo…"
+              : busy
+                ? "Guardando…"
+                : "Guardar plato"}
+          </button>
+        </div>
       </fieldset>
     </form>
   );

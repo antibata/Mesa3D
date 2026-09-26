@@ -10,12 +10,10 @@ test('prices preserve two decimals without adding decimals to whole amounts', ()
   assert.match(priceLabel(14500, 'ARS'), /14\.500$/);
   assert.equal(dishSchema.safeParse({ ...seed.dishes[0], price: 12.555 }).success, false);
 });
-test('invalid asset URLs cannot break the image or model component', () => {
+test('invalid asset URLs cannot break the image component', () => {
   for (const value of ['https://', 'javascript:alert(1)', '//evil.test/a', '/media/../../secret', 'https://user:pass@example.com/a']) assert.equal(isAssetUrl(value), false, value);
   assert.equal(isAssetUrl('https://example.com/photo.jpg'), true);
   assert.equal(isAssetUrl('/media/photo.jpg'), true);
-  assert.equal(isAssetUrl('/models/burger.glb', 'model'), true);
-  assert.equal(isAssetUrl('/models/burger.glb', 'image'), false);
 });
 test('categories cannot duplicate with different case or surrounding spaces', () => {
   assert.equal(restaurantSchema.safeParse({ ...seed.restaurants[0], categories: ['Postres', ' postres '] }).success, false);
